@@ -3572,7 +3572,7 @@ function shareDailySummaryWhatsApp(){
 // QR DO ANIMAL — gera uma etiqueta (pra colar no brinco/cocho) que pode
 // ser impressa direto do computador. A leitura por câmera é só no app do
 // celular (não faz sentido num site). A biblioteca (qrcode) fica guardada
-// dentro do próprio site (vendor/, carregada por <script> no index.html) —
+// dentro do próprio site (carregada por <script> no index.html) —
 // não vem de um CDN externo (era assim antes e podia falhar mesmo com
 // internet normal, se a rede da pessoa não alcançasse aquele CDN
 // específico) — então funciona sempre, com ou sem internet.

@@ -9,9 +9,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
-<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png">
-<link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png">
 <link rel="manifest" href="manifest.json">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <!-- Plugins nativos do Capacitor (só fazem algo dentro do app instalado —
@@ -24,10 +24,10 @@
 <!-- QR: geração (QRCode.toCanvas) da etiqueta pra impressão — usada pelo
      "QR do animal". A leitura por câmera é só no app do celular (não faz
      sentido num site). Ao contrário das outras bibliotecas acima, esta fica
-     guardada AQUI DENTRO do site (pasta vendor/), não num CDN externo — pra
+     guardada AQUI DENTRO do site (não num CDN externo) — pra
      funcionar mesmo sem internet nenhuma ou quando o CDN de terceiros está
      fora do ar/bloqueado na rede da pessoa. -->
-<script src="vendor/qrcode.min.js"></script>
+<script src="qrcode.min.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -37,7 +37,7 @@
              sobre tudo o resto, então cobre o instante em que o HTML já
              pintou mas ainda não sabemos se a pessoa está logada. -->
         <div class="boot-screen" id="bootScreen">
-          <img src="assets/icon-512.png" alt="" class="boot-logo">
+          <img src="icon-512.png" alt="" class="boot-logo">
           <div class="boot-dots"><span></span><span></span><span></span><span></span><span></span></div>
         </div>
         <script>
@@ -361,7 +361,7 @@
         <!-- Autenticação real (Supabase) — só aparece quando o backend está configurado -->
         <div class="auth-overlay" id="authOverlay">
         <div class="auth-card">
-          <img class="auth-logo-img" src="assets/agroop-logo.png" alt="AGROOP">
+          <img class="auth-logo-img" src="agroop-logo.png" alt="AGROOP">
           <div class="auth-sub">Gestão da sua fazenda, do seu jeito</div>
 
           <div class="auth-tabs" id="authTabsRow">
@@ -411,7 +411,7 @@
              existirem na conta), tanto pra quem entra por e-mail quanto por Google. -->
         <div class="auth-overlay" id="onboardingOverlay">
         <div class="auth-card">
-          <img class="auth-logo-img" src="assets/agroop-logo.png" alt="AGROOP">
+          <img class="auth-logo-img" src="agroop-logo.png" alt="AGROOP">
           <div class="auth-sub">Só mais um passo antes de começar</div>
 
           <div class="auth-msg" id="onbMsg"></div>

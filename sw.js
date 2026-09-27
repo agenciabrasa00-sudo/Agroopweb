@@ -11,7 +11,7 @@
 // Bump esta versão sempre que publicar uma mudança em index.html/style.css/
 // script.js, pra garantir que quem já tem o app instalado receba a versão
 // nova (o cache antigo é apagado no "activate").
-const CACHE_VERSION = 'agroop-shell-v60';
+const CACHE_VERSION = 'agroop-shell-v61';
 
 const APP_SHELL = [
   './',
@@ -19,14 +19,14 @@ const APP_SHELL = [
   './style.css',
   './script.js',
   './manifest.json',
-  './assets/favicon-16.png',
-  './assets/favicon-32.png',
-  './assets/favicon-180.png',
-  './assets/agroop-logo.png',
-  './assets/icon-192.png',
-  './assets/icon-512.png',
-  './assets/icon-512-maskable.png',
-  './vendor/qrcode.min.js',
+  './favicon-16.png',
+  './favicon-32.png',
+  './favicon-180.png',
+  './agroop-logo.png',
+  './icon-192.png',
+  './icon-512.png',
+  './icon-512-maskable.png',
+  './qrcode.min.js',
 ];
 
 self.addEventListener('install', (event) => {
