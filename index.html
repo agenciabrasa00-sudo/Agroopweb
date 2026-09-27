@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#132d1b">
+<meta name="color-scheme" content="light">
+<title>AGROOP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png">
+<link rel="manifest" href="manifest.json">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<!-- Plugins nativos do Capacitor (só fazem algo dentro do app instalado —
+     no navegador/PWA normal essas tags não têm efeito nenhum) usados pra
+     manter o login com Google DENTRO do app, sem cair no site. -->
+<script src="https://cdn.jsdelivr.net/npm/@capacitor/app@8/dist/plugin.cjs.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@capacitor/browser@8/dist/plugin.cjs.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- QR: geração (QRCode.toCanvas) da etiqueta pra impressão — usada pelo
+     "QR do animal". A leitura por câmera é só no app do celular (não faz
+     sentido num site). Ao contrário das outras bibliotecas acima, esta fica
+     guardada AQUI DENTRO do site (pasta vendor/), não num CDN externo — pra
+     funcionar mesmo sem internet nenhuma ou quando o CDN de terceiros está
+     fora do ar/bloqueado na rede da pessoa. -->
+<script src="vendor/qrcode.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+        <!-- Tela de carregamento: some assim que o app decide se mostra o
+             login ou a Início (ver hideBootScreen() em script.js). Fica
+             sobre tudo o resto, então cobre o instante em que o HTML já
+             pintou mas ainda não sabemos se a pessoa está logada. -->
+        <div class="boot-screen" id="bootScreen">
+          <img src="assets/icon-512.png" alt="" class="boot-logo">
+          <div class="boot-dots"><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+        <script>
+          // Marca a hora exata em que a tela de carregamento apareceu —
+          // script.js usa isso pra garantir que ela fique visível pelo
+          // tempo mínimo (ver BOOT_MIN_MS/hideBootScreen), mesmo quando o
+          // login já estava salvo e tudo resolve rápido demais.
+          window.__bootStart = Date.now();
+          // Rede de segurança: se por algum motivo o app travar antes de
+          // conseguir esconder essa tela sozinho (erro de rede, script.js
+          // não carregou etc.), some com ela de qualquer jeito depois de um
+          // tempo pra nunca deixar a pessoa presa numa tela de carregamento.
+          setTimeout(function(){
+            var el = document.getElementById('bootScreen');
+            if(el) el.classList.add('hide');
+          }, 12000);
+        </script>
+
+        <div class="app-body" id="appBody">
+          <div id="accessBanner" style="display:none;background:#fff4e0;color:#7a5300;font-size:10.5px;padding:7px 16px;align-items:center;gap:6px;"></div>
+
+          <!-- HOME -->
+          <section class="screen active" id="screen-home">
+            <div class="app-header">
+              <div class="row">
+                <div>
+                  <div class="greet"><span id="greetText">Bom dia</span>, <span id="greetName">Luiz</span> <span class="wave">👋</span></div>
+                  <div class="sub">3 propriedades · 3 alertas ativos</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <button class="bell" onclick="pushScreen('screen-notifications')"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg><span class="badge">3</span></button>
+                  <button class="bell" onclick="goTab('screen-more')" title="Menu"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+                </div>
+              </div>
+              <button class="sync-pill" id="syncPill" onclick="cycleSync()"><span class="sync-dot"></span><span id="syncLabel">Sincronizado às 07:42</span></button>
+            </div>
+
+            <!-- Cabeçalho do painel — só aparece no modo desktop (tela larga);
+                 no celular quem cumpre esse papel é o app-header verde acima. -->
+            <div class="dash-page-header">
+              <div>
+                <h1 class="dph-title">Visão geral</h1>
+                <div class="dph-sub">Acompanhe a operação das suas propriedades em tempo real.</div>
+              </div>
+              <div class="dph-actions">
+                <button type="button" class="dash-btn" onclick="goTab('screen-reports')">Gerar relatório</button>
+                <button type="button" class="dash-btn" onclick="openAddActivityForm()">＋ Nova atividade</button>
+                <button type="button" class="dash-btn primary" onclick="openAddFarmForm()">＋ Cadastrar propriedade</button>
+              </div>
+            </div>
+
+            <div class="h-eyebrow section-pad" id="homePrioritiesLabel" style="display:flex;align-items:center;justify-content:space-between;">Prioridades<a href="javascript:void(0)" onclick="goTab('screen-activities')" style="text-transform:none;letter-spacing:normal;font-weight:700;font-size:12.5px;color:var(--brand-dark);text-decoration:none;display:flex;align-items:center;gap:2px;">Ver tudo <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></a></div>
+            <div id="homePriorityStats" style="padding:0 16px 6px;"></div>
+            <!-- Cartões de resumo do modo desktop (Propriedades/Atividades/Área/
+                 Alertas) — só aparecem em tela larga, escondidos no celular. -->
+            <div class="dash-stats-row" id="homeDesktopStats"></div>
+            <div class="section-pad dash-mobile-actions" style="padding-top:2px;padding-bottom:6px;">
+              <button type="button" class="fab-btn" style="flex:1;justify-content:center;" onclick="openAddFarmForm()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px;"><path d="M12 5v14M5 12h14"/></svg>Cadastrar propriedade</button>
+              <button type="button" class="fab-btn ghost" style="flex:none;justify-content:center;" onclick="openDailySummary()">Resumo do dia</button>
+            </div>
+
+            <!-- No modo desktop, "Operação da semana" (gráfico + próximas
+                 atividades) e "Clima agora" viram duas colunas lado a lado
+                 (dash-grid-2col); no celular esse bloco não muda nada —
+                 continua um embaixo do outro, exatamente como já era (o
+                 conteúdo do modo desktop nem aparece lá, ver dash-col-left). -->
+            <div class="dash-grid-2col">
+              <div class="dash-col-left">
+                <div class="h-eyebrow section-pad" style="display:flex;align-items:center;justify-content:space-between;">Operação da semana<a href="javascript:void(0)" onclick="goTab('screen-activities')" style="text-transform:none;letter-spacing:normal;font-weight:700;font-size:12.5px;color:var(--brand-dark);text-decoration:none;display:flex;align-items:center;gap:2px;">Ver todas <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></a></div>
+                <div class="dash-card">
+                  <div class="dwo-tabs">
+                    <button type="button" class="dwo-tab active" data-dwotab="atividades" onclick="setWeekOpsTab('atividades')">Atividades</button>
+                    <button type="button" class="dwo-tab" data-dwotab="agenda" onclick="setWeekOpsTab('agenda')">Agenda</button>
+                    <button type="button" class="dwo-tab" data-dwotab="indicadores" onclick="setWeekOpsTab('indicadores')">Indicadores</button>
+                  </div>
+                  <div id="homeWeekOpsBody"></div>
+                </div>
+              </div>
+              <div class="dash-col-right">
+                <div class="dash-mobile-weather">
+                  <div class="h-eyebrow section-pad">Propriedades</div>
+                  <div class="section-pad weather-select-wrap">
+                    <div id="homeWeatherFarmSelect"></div>
+                  </div>
+                  <div class="h-eyebrow section-pad">Clima</div>
+                  <div id="homeWeatherCard"></div>
+                </div>
+                <div class="dash-desktop-weather">
+                  <div class="h-eyebrow section-pad">Clima agora</div>
+                  <div id="homeWeatherCardDesktop"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- No modo desktop, "Suas propriedades" (tabela) e "Módulos"
+                 viram duas colunas lado a lado; no celular a ordem visual
+                 continua a mesma de sempre (Módulos, depois Propriedades). -->
+            <div class="dash-props-modules-row">
+              <div class="dpm-col-modules">
+                <div class="h-eyebrow section-pad">Módulos</div>
+                <div class="module-row">
+                  <div class="module-card" onclick="openAgriculturaPanel()">
+                    <svg class="mwatermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 019.8 6.1C15.5 5 20 5.5 20 5.5s.5 4.5-.6 10.2A7 7 0 0111 20z"/><path d="M2 21c0-6 4-10 10-10"/></svg>
+                    <div class="mi"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 019.8 6.1C15.5 5 20 5.5 20 5.5s.5 4.5-.6 10.2A7 7 0 0111 20z"/><path d="M2 21c0-6 4-10 10-10"/></svg></div>
+                    <div class="mt">Agricultura</div>
+                    <div class="ms" id="agroModuleSummary">—</div>
+                    <div class="mlink">Ver detalhes <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></div>
+                  </div>
+                  <div class="module-card pec" onclick="openPecuariaPanel()">
+                    <svg class="mwatermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8c-1.5-1-2.5-3-1.5-4.5C6.5 2 8 3 8.5 5"/><path d="M17 8c1.5-1 2.5-3 1.5-4.5C17.5 2 16 3 15.5 5"/><path d="M5.5 9C4 9 3 10.3 3 11.8c0 1.2.8 2.2 2 2.5"/><path d="M18.5 9c1.5 0 2.5 1.3 2.5 2.8 0 1.2-.8 2.2-2 2.5"/><path d="M6.5 9.5c0-2.5 2.4-4.5 5.5-4.5s5.5 2 5.5 4.5c0 4-2 7.5-5.5 7.5s-5.5-3.5-5.5-7.5z"/></svg>
+                    <div class="mi"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8c-1.5-1-2.5-3-1.5-4.5C6.5 2 8 3 8.5 5"/><path d="M17 8c1.5-1 2.5-3 1.5-4.5C17.5 2 16 3 15.5 5"/><path d="M5.5 9C4 9 3 10.3 3 11.8c0 1.2.8 2.2 2 2.5"/><path d="M18.5 9c1.5 0 2.5 1.3 2.5 2.8 0 1.2-.8 2.2-2 2.5"/><path d="M6.5 9.5c0-2.5 2.4-4.5 5.5-4.5s5.5 2 5.5 4.5c0 4-2 7.5-5.5 7.5s-5.5-3.5-5.5-7.5z"/><circle cx="9.5" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="14.5" cy="11" r=".8" fill="currentColor" stroke="none"/><path d="M10 14.5c.5.5 1.5.5 2 0"/></svg></div>
+                    <div class="mt">Pecuária</div>
+                    <div class="ms" id="pecModuleSummary">—</div>
+                    <div class="mlink">Ver detalhes <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="dpm-col-props">
+                <div class="h-eyebrow section-pad" style="display:flex;align-items:center;justify-content:space-between;">Suas propriedades<a href="javascript:void(0)" onclick="goTab('screen-properties')" class="dash-only-link" style="text-transform:none;letter-spacing:normal;font-weight:700;font-size:12.5px;color:var(--brand-dark);text-decoration:none;align-items:center;gap:2px;">Ver todas <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></a></div>
+                <div id="homeFarmList"></div>
+                <!-- mesma informação de #homeFarmList, em formato de tabela — só
+                     aparece no modo desktop (tela larga aproveita melhor uma
+                     tabela do que cartões empilhados). -->
+                <div id="homePropertiesTable" class="dash-table-wrap section-pad"></div>
+              </div>
+            </div>
+
+            <!-- Só no celular — no desktop essa mesma informação já aparece na
+                 aba "Atividades" do cartão "Operação da semana" acima. -->
+            <div class="h-eyebrow section-pad dash-mobile-only">Atividades atrasadas e de hoje</div>
+            <div id="homeActivityList" class="dash-mobile-only"></div>
+          </section>
+
+          <!-- PROPERTIES LIST -->
+          <section class="screen" id="screen-properties">
+            <div class="back-header">
+              <div><h3>Propriedades</h3><div class="hsub" id="propertiesCountLabel">3 fazendas cadastradas</div></div>
+            </div>
+            <div class="filter-row" id="propFilters"></div>
+            <div class="fab-row"><button class="fab-btn" onclick="openAddFarmForm()">＋ Nova propriedade</button></div>
+            <div class="card" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="openAllFarmsMapSheet()">
+              <span style="font-size:12px;color:var(--ink-2);">Ver todas no mapa</span>
+              <span class="chev">›</span>
+            </div>
+            <div id="propertiesFullList"></div>
+          </section>
+
+          <!-- PROPERTY DETAIL -->
+          <section class="screen" id="screen-property">
+            <div class="back-header">
+              <button class="back-btn" onclick="goBack()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M20 12H5M11 5.5L4.5 12L11 18.5"/></svg></button>
+              <div style="flex:1;"><h3 id="pdName">—</h3><div class="hsub" id="pdLoc">—</div></div>
+              <button class="icon-btn-sm danger" title="Apagar propriedade" onclick="confirmDeleteFarm(window._currentFarm)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M4 7h16"/><path d="M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><path d="M10 11v6M14 11v6"/></svg></button>
+            </div>
+            <div class="tabs-row" id="pdTabs"></div>
+            <div id="pdContent"></div>
+          </section>
+
+          <!-- CONDITION DETAIL (overlay-style screen) -->
+          <section class="screen" id="screen-condition">
+            <div class="back-header">
+              <button class="back-btn" onclick="goBack()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M20 12H5M11 5.5L4.5 12L11 18.5"/></svg></button>
+              <div><h3>Condição operacional</h3><div class="hsub" id="condSub">—</div></div>
+            </div>
+            <div id="condContent"></div>
+          </section>
+
+          <!-- ANIMAL PROFILE -->
+          <section class="screen" id="screen-animal">
+            <div class="back-header">
+              <button class="back-btn" onclick="goBack()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M20 12H5M11 5.5L4.5 12L11 18.5"/></svg></button>
+              <div><h3 id="animalName">—</h3><div class="hsub" id="animalSub">—</div></div>
+            </div>
+            <div id="animalContent"></div>
+          </section>
+
+          <!-- ACTIVITY DETAIL -->
+          <section class="screen" id="screen-activity-detail">
+            <div class="back-header">
+              <button class="back-btn" onclick="goBack()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M20 12H5M11 5.5L4.5 12L11 18.5"/></svg></button>
+              <div><h3>Detalhe da atividade</h3><div class="hsub" id="actDetailSub">—</div></div>
+            </div>
+            <div id="actDetailContent"></div>
+          </section>
+
+          <!-- ACTIVITIES / AGENDA -->
+          <section class="screen" id="screen-activities">
+            <div class="back-header"><div><h3>Atividades</h3><div class="hsub">Agenda única — Agricultura e Pecuária</div></div></div>
+            <div class="filter-row" id="actFilters"></div>
+            <div class="fab-row"><button class="fab-btn" onclick="openAddActivityForm()">＋ Nova atividade</button></div>
+            <div id="activitiesList"></div>
+          </section>
+
+          <!-- NOTIFICATIONS -->
+          <section class="screen" id="screen-notifications">
+            <div class="back-header"><div><h3>Central de Notificações</h3><div class="hsub">Histórico por propriedade</div></div></div>
+            <div id="notifFilters" class="filter-row" style="padding:0 16px 10px;"></div>
+            <div id="notifList"></div>
+          </section>
+
+          <!-- REPORTS -->
+          <section class="screen" id="screen-reports">
+            <div class="back-header"><div><h3>Relatórios</h3><div class="hsub">Indicadores operacionais</div></div></div>
+            <div id="reportsContent"></div>
+          </section>
+
+          <!-- MORE -->
+          <section class="screen" id="screen-more">
+            <div class="back-header"><div><h3>Mais</h3><div class="hsub">Perfil, equipe e configurações</div></div></div>
+            <div class="profile-card">
+              <div class="profile-avatar" id="profileAvatar">LH</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:800;font-size:14px;" id="profileName">Luiz Henrique</div>
+                <div style="font-size:11px;opacity:.85;" id="profileSub">Proprietário · 3 propriedades</div>
+              </div>
+            </div>
+            <div class="settings-item" onclick="openFieldRecordsSheet()"><div class="settings-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 012-2h1.2l1-1.6A2 2 0 0110 3.5h4a2 2 0 011.8.9L17 6h1a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/><circle cx="12" cy="13" r="3.5"/></svg></div><div><div class="settings-t">Registros de campo</div><div class="settings-s" id="fieldRecordsSummary">2 registros</div></div><span class="chev">›</span></div>
+            <div class="settings-item" onclick="openTeamSheet()"><div class="settings-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3.3 2.5-5.8 5.5-5.8s5.5 2.5 5.5 5.8"/><circle cx="17" cy="8.5" r="2.4"/><path d="M15.5 14.3c2.6.3 4.5 2.6 4.5 5.7h-2.7"/></svg></div><div><div class="settings-t">Equipe e permissões</div><div class="settings-s" id="teamSummary">4 pessoas com acesso</div></div><span class="chev">›</span></div>
+            <div class="settings-item" onclick="openSyncSheet()"><div class="settings-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg></div><div><div class="settings-t">Sincronização</div><div class="settings-s" id="moreSyncStatus">Sincronizado às 07:42</div></div><span class="chev">›</span></div>
+            <div class="settings-item" onclick="openClimateSourceSheet()"><div class="settings-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.5 3.8 5.7 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.7-3.8-9S9.5 5.5 12 3z"/></svg></div><div><div class="settings-t">Fontes climáticas</div><div class="settings-s" id="climateSourceSummary">Open-Meteo (tempo real)</div></div><span class="chev">›</span></div>
+            <div class="settings-item" onclick="openNotifPrefsSheet()"><div class="settings-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg></div><div><div class="settings-t">Preferências de notificação</div><div class="settings-s" id="notifPrefsSummary">7 de 7 ativas</div></div><span class="chev">›</span></div>
+            <div class="settings-item" onclick="openSupportSheet()"><div class="settings-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H8l-4 4V5z"/></svg></div><div><div class="settings-t">Suporte</div><div class="settings-s">Falar com a equipe AGROOP</div></div><span class="chev">›</span></div>
+            <div class="settings-item" onclick="openAboutSheet()"><div class="settings-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.5" r=".9" fill="currentColor" stroke="none"/></svg></div><div><div class="settings-t">Sobre o AGROOP</div><div class="settings-s">Versão do conceito 1.0</div></div><span class="chev">›</span></div>
+            <div class="settings-item" id="logoutMenuItem" style="display:none;" onclick="doSignOut()"><div class="settings-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></div><div><div class="settings-t">Sair</div><div class="settings-s" id="loggedInAsLabel">Encerrar sessão</div></div><span class="chev">›</span></div>
+          </section>
+
+        </div>
+
+        <!-- BARRA SUPERIOR DO MODO DESKTOP — só aparece em tela larga (o CSS
+             esconde por completo no celular). Mostra em que tela a pessoa
+             está, uma busca rápida, status de sincronização, notificações e
+             o perfil — igual a barra de topo de um sistema de gestão. -->
+        <div class="desktop-topbar" id="desktopTopbar">
+          <div class="dt-crumb"><span id="dtCrumbRoot">Início</span><span class="dt-sep">/</span><span id="dtCrumbCurrent">Visão geral</span></div>
+          <div class="dt-search-wrap">
+            <span class="dt-search-ic-fixed"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+            <input type="text" id="dtSearchInput" class="dt-search-input" placeholder="Buscar propriedade ou atividade…" autocomplete="off" oninput="handleDesktopSearch(this.value)" onfocus="handleDesktopSearch(this.value)" onblur="setTimeout(closeDesktopSearch,150)">
+            <div class="dt-search-results" id="dtSearchResults"></div>
+          </div>
+          <div class="dt-actions">
+            <button class="dt-sync-pill" id="dtSyncPill" onclick="cycleSync()"><span class="sync-dot"></span><span id="dtSyncLabel">Sincronizado agora</span></button>
+            <button class="bell" onclick="pushScreen('screen-notifications')" title="Notificações"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg><span class="badge">0</span></button>
+            <button class="dt-avatar" onclick="goTab('screen-more')" title="Perfil"><span id="dtAvatarInitial">A</span></button>
+          </div>
+        </div>
+
+        <div class="bottom-nav" id="bottomNav">
+          <button class="bn-item active" data-tab="screen-home"><span class="bi"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></span>Início</button>
+          <button class="bn-item" data-tab="screen-properties"><span class="bi"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3L3 5v16l6-2 6 2 6-2V3l-6 2-6-2z"/><path d="M9 3v16"/><path d="M15 5v16"/></svg></span>Propriedades</button>
+          <button class="bn-item" data-tab="screen-activities"><span class="bi"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v3h8V3"/><path d="M8 11h8M8 15h8M8 19h5"/></svg></span>Atividades</button>
+          <button class="bn-item" data-tab="screen-reports"><span class="bi"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/><path d="M2 20h20"/></svg></span>Relatórios</button>
+          <button class="bn-item" data-tab="screen-more"><span class="bi"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>Configurações</button>
+        </div>
+
+        <!-- Bottom sheet used by every "Novo/Editar/Registrar" form -->
+        <div class="sheet-overlay" id="sheetOverlay" onclick="if(event.target===this) closeSheet()">
+          <div class="sheet-panel">
+            <div class="sheet-handle"></div>
+            <div class="sheet-head"><h4 id="sheetTitle">—</h4><button class="sheet-close" onclick="closeSheet()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" style="display:block;"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></div>
+            <div id="sheetBody"></div>
+          </div>
+        </div>
+        <div class="toast" id="toast"></div>
+        <div class="success-burst" id="successBurst"><div class="sb-circle"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6"/></svg></div></div>
+
+        <!-- Lightbox — amplia qualquer foto (perfil, propriedade) sobre o que estiver aberto -->
+        <div class="photo-lightbox" id="photoLightbox" onclick="if(event.target===this) closePhotoLightbox()">
+          <button class="photo-lightbox-close" onclick="closePhotoLightbox()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" style="display:block;"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+          <img id="photoLightboxImg" src="" alt="Foto ampliada">
+        </div>
+
+        <!-- Calendário — substitui o seletor de data nativo do celular (antigo
+             e feio) por um calendário com o visual do app. Fica numa camada
+             própria, então abre por cima de um formulário sem fechar/perder o
+             que a pessoa já preencheu nele. -->
+        <div class="date-picker-overlay" id="datePickerOverlay" onclick="if(event.target===this) closeDatePicker()">
+          <div class="date-picker-card">
+            <div class="dp-head">
+              <div class="dp-title" id="dpTitle">
+                <button type="button" class="dp-title-part" id="dpTitleMonth" onclick="dpOpenView('months')">—</button>
+                <button type="button" class="dp-title-part" id="dpTitleYear" onclick="dpOpenView('years')">—</button>
+              </div>
+              <div class="dp-nav">
+                <button type="button" class="dp-nav-btn" onclick="dpChangeMonth(-1)" aria-label="Mês anterior">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <button type="button" class="dp-nav-btn" onclick="dpChangeMonth(1)" aria-label="Próximo mês">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="dp-weekdays" id="dpWeekdays"></div>
+            <div class="dp-grid" id="dpGrid"></div>
+            <div class="dp-actions">
+              <button type="button" class="dp-btn ghost" onclick="dpClearAndClose()">Limpar</button>
+              <button type="button" class="dp-btn" onclick="dpGoToday()">Hoje</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Editor de foto — arrastar para posicionar e slider para dar zoom antes
+             de definir a foto de perfil (aparece ao escolher uma imagem nova). -->
+        <div class="photo-crop-overlay" id="photoCropOverlay">
+          <div class="photo-crop-title">Ajustar foto</div>
+          <div class="photo-crop-stage" id="photoCropStage" onmousedown="cropDragStart(event)" ontouchstart="cropDragStart(event)">
+            <img id="photoCropImg" src="" alt="">
+          </div>
+          <div class="photo-crop-hint">Arraste a foto para posicionar</div>
+          <div class="photo-crop-zoom-row">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="range" id="photoCropZoom" min="100" max="300" value="100" oninput="onCropZoomChange(this.value)">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/><line x1="11" y1="8" x2="11" y2="14"/></svg>
+          </div>
+          <div class="photo-crop-actions">
+            <button class="photo-crop-btn cancel" onclick="cancelPhotoCrop()">Cancelar</button>
+            <button class="photo-crop-btn confirm" onclick="confirmPhotoCrop()">Usar foto</button>
+          </div>
+        </div>
+
+        <!-- Autenticação real (Supabase) — só aparece quando o backend está configurado -->
+        <div class="auth-overlay" id="authOverlay">
+        <div class="auth-card">
+          <img class="auth-logo-img" src="assets/agroop-logo.png" alt="AGROOP">
+          <div class="auth-sub">Gestão da sua fazenda, do seu jeito</div>
+
+          <div class="auth-tabs" id="authTabsRow">
+            <button class="auth-tab active" id="authTabLogin" onclick="setAuthMode('login')">Entrar</button>
+            <button class="auth-tab" id="authTabSignup" onclick="setAuthMode('signup')">Criar conta</button>
+          </div>
+
+          <div class="auth-msg" id="authMsg"></div>
+
+          <div class="auth-form active" id="authFormLogin">
+            <div class="form-field"><label for="authLoginEmail">E-mail</label><input id="authLoginEmail" type="email" placeholder="voce@email.com" autocomplete="email"></div>
+            <div class="form-field"><label for="authLoginPass">Senha</label><div class="pw-field"><input id="authLoginPass" type="password" placeholder="Sua senha" autocomplete="current-password"><button type="button" class="pw-toggle" onclick="togglePasswordVisibility('authLoginPass', this)" aria-label="Mostrar senha"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+            <button class="auth-submit" onclick="doSignIn()">Entrar</button>
+            <button class="auth-link" onclick="doForgotPassword()">Esqueci minha senha</button>
+          </div>
+
+          <div class="auth-form" id="authFormSignup">
+            <div class="form-field"><label for="authSignupName">Nome completo</label><input id="authSignupName" placeholder="Seu nome" autocomplete="name"></div>
+            <div class="form-field"><label for="authSignupEmail">E-mail</label><input id="authSignupEmail" type="email" placeholder="voce@email.com" autocomplete="email"></div>
+            <div class="form-field"><label for="authSignupPass">Senha</label><div class="pw-field"><input id="authSignupPass" type="password" placeholder="Crie uma senha (mín. 6 caracteres)" autocomplete="new-password"><button type="button" class="pw-toggle" onclick="togglePasswordVisibility('authSignupPass', this)" aria-label="Mostrar senha"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+            <button class="auth-submit" onclick="doSignUp()">Criar conta</button>
+          </div>
+
+          <div id="authSocialWrap">
+            <div class="auth-divider"><span>ou</span></div>
+            <button class="auth-social-btn" onclick="doGoogleLogin()"><svg viewBox="0 0 18 18" width="18" height="18" style="display:block;flex:none;"><path fill="#4285F4" d="M17.64 9.2045c0-.6381-.0573-1.2518-.1636-1.8409H9v3.4818h4.8436c-.2086 1.125-.8427 2.0782-1.7959 2.7164v2.2581h2.9087c1.7018-1.5668 2.6836-3.8741 2.6836-6.6154z"/><path fill="#34A853" d="M9 18c2.43 0 4.4673-.8059 5.9564-2.1805l-2.9087-2.2581c-.8059.54-1.8368.8591-3.0477.8591-2.3436 0-4.3282-1.5831-5.0359-3.7104H.9573v2.3318C2.4382 15.9832 5.4818 18 9 18z"/><path fill="#FBBC05" d="M3.9641 10.71c-.18-.54-.2823-1.1168-.2823-1.71s.1023-1.17.2823-1.71V4.9582H.9573A8.9965 8.9965 0 000 9c0 1.4523.3477 2.8268.9573 4.0418L3.9641 10.71z"/><path fill="#EA4335" d="M9 3.5795c1.3214 0 2.5077.4541 3.4405 1.346l2.5814-2.5814C13.4632.8918 11.4259 0 9 0 5.4818 0 2.4382 2.0168.9573 4.9582L3.9641 7.29C4.6718 5.1627 6.6564 3.5795 9 3.5795z"/></svg> Entrar com Google</button>
+          </div>
+
+          <div class="auth-demo-note">Seus dados ficam salvos com segurança e só você pode vê-los.</div>
+          <div class="auth-demo-note" id="authPreviewNote" style="display:none;">
+            Isso é só uma prévia visual — o Supabase ainda não está configurado.<br>
+            <button class="auth-link" style="margin-top:6px;display:inline-flex;align-items:center;gap:4px;" onclick="hideAuthOverlay()"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg> Fechar prévia</button>
+          </div>
+        </div>
+        </div>
+
+        <!-- Enquanto propriedades, talhões, animais etc. ainda estão sendo
+             buscados no servidor logo após o login, mostra isso em vez de
+             deixar a tela Início parecendo vazia/zerada por engano. -->
+        <div class="data-loading-overlay" id="dataLoadingOverlay">
+          <div class="data-loading-spinner"></div>
+          <div class="data-loading-text">Carregando seus dados...</div>
+        </div>
+
+        <!-- Primeiro acesso: pergunta como chamar a pessoa, idade e nome completo
+             antes de liberar o app. Só aparece uma vez (enquanto esses dados não
+             existirem na conta), tanto pra quem entra por e-mail quanto por Google. -->
+        <div class="auth-overlay" id="onboardingOverlay">
+        <div class="auth-card">
+          <img class="auth-logo-img" src="assets/agroop-logo.png" alt="AGROOP">
+          <div class="auth-sub">Só mais um passo antes de começar</div>
+
+          <div class="auth-msg" id="onbMsg"></div>
+
+          <div class="auth-form active">
+            <div class="form-field"><label for="onbNickname">Como você gostaria de ser chamado(a)?</label><input id="onbNickname" placeholder="Ex: Luiz" autocomplete="nickname"></div>
+            <div class="form-field"><label for="onbBirthdate">Data de nascimento</label><input id="onbBirthdate" type="date"></div>
+            <div class="form-field"><label for="onbFullName">Nome completo</label><input id="onbFullName" placeholder="Seu nome completo" autocomplete="name"></div>
+            <button class="auth-submit" onclick="completeOnboarding()">Continuar</button>
+          </div>
+
+          <div class="auth-demo-note">Você pode alterar essas informações depois, no seu perfil.</div>
+        </div>
+        </div>
+
+
+<script src="script.js"></script>
+</body>
+</html>
